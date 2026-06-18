@@ -1,4 +1,0 @@
--------------------------------------------------------------------------------
-Test set: xml.converter.XmlConverterSinkTaskTest
--------------------------------------------------------------------------------
-Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.722 s - in xml.converter.XmlConverterSinkTaskTest
