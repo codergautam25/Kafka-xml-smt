@@ -1,0 +1,4 @@
+xml/converter/XmlRecordWriter.class
+xml/converter/XmlConverterSinkConnector.class
+xml/converter/XmlConverterConfig.class
+xml/converter/XmlConverterSinkTask.class
