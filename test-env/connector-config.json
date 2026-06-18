@@ -1,0 +1,15 @@
+{
+  "name": "xml-sink-connector",
+  "config": {
+    "connector.class": "xml.converter.XmlConverterSinkConnector",
+    "tasks.max": "1",
+    "topics": "avro-source",
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "value.converter": "io.confluent.connect.avro.AvroConverter",
+    "value.converter.schema.registry.url": "http://schema-registry:8081",
+    "xml.target.topic": "xml-target",
+    "xml.root.element.name": "testRecord",
+    "xml.producer.bootstrap.servers": "kafka:29092",
+    "xml.producer.acks": "all"
+  }
+}

@@ -1,0 +1,11 @@
+FROM confluentinc/cp-kafka-connect:7.4.0
+
+USER root
+
+# Create the folder for the custom connector plugin
+RUN mkdir -p /usr/share/confluent-hub-components/kafka-xml-smt
+
+# Copy the custom connector JAR (fat JAR with all dependencies)
+COPY release/kafka-xml-smt-1.0-SNAPSHOT-jar-with-dependencies.jar /usr/share/confluent-hub-components/kafka-xml-smt/
+
+USER appuser
