@@ -1,0 +1,11 @@
+FROM quay.io/strimzi/kafka:1.0.1-kafka-4.1.0
+
+USER root:root
+
+# Create directory for custom connector plugin
+RUN mkdir -p /opt/kafka/plugins/kafka-xml-smt
+
+# Copy custom connector JAR (which now bundles the Avro Converter and all dependencies)
+COPY target/kafka-xml-smt-1.0-SNAPSHOT-jar-with-dependencies.jar /opt/kafka/plugins/kafka-xml-smt/
+
+USER 1001
