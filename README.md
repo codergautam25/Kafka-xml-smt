@@ -137,7 +137,7 @@ The generated payload published to the target topic is:
 ## Build & Installation
 
 ### Requirements
-* Java JDK 17
+* Java JDK 11
 * Apache Maven
 
 ### Steps
@@ -145,7 +145,7 @@ The generated payload published to the target topic is:
    ```bash
    mvn clean package
    ```
-2. Retrieve the plugin artifact from `target/kafka-xml-smt-1.0-SNAPSHOT.jar`.
+2. Retrieve the plugin artifact from `target/kafka-xml-smt-1.0-SNAPSHOT-jar-with-dependencies.jar`.
 3. Copy the JAR file to your Kafka Connect worker's plugins directory (e.g., `/usr/share/java/kafka/plugins/`).
 4. Restart your Kafka Connect cluster instances to load the connector.
 
@@ -178,3 +178,121 @@ curl -X POST -H "Content-Type: application/json" \
   }' \
   http://localhost:8083/connectors
 ```
+
+---
+
+## Testing Environments
+
+This project provides two fully automated end-to-end testing environments: a Docker Compose suite and a Kubernetes Strimzi Operator suite.
+
+### Option 1: Local Docker Compose Testing
+
+This environment uses a multi-container Docker Compose setup containing:
+- ZooKeeper
+- Kafka Broker
+- Schema Registry
+- Kafka Connect Custom Worker
+
+#### Step-by-Step Execution:
+1. Ensure your local Docker daemon is running.
+2. Run the automated Docker Compose test script:
+   ```bash
+   ./test-env/test-end-to-end.sh
+   ```
+
+#### Manual Verification Commands:
+If you wish to interact with the Docker environment manually:
+1. Spin up the cluster:
+   ```bash
+   docker compose -f test-env/docker-compose.yml up --build -d
+   ```
+2. Wait for Kafka Connect to be healthy:
+   ```bash
+   curl -s http://localhost:8083/connectors
+   ```
+3. Register the connector:
+   ```bash
+   curl -X POST -H "Content-Type: application/json" \
+     --data @test-env/connector-config.json \
+     http://localhost:8083/connectors
+   ```
+4. Produce a sample Avro message to the source topic `avro-source`:
+   ```bash
+   SCHEMA_REGISTRY_CID=$(docker ps --filter "name=schema-registry" --format "{{.ID}}" | head -n 1)
+   echo '{"id": 1001, "name": "Alice & Bob", "status": "active"}' | docker exec -i "$SCHEMA_REGISTRY_CID" kafka-avro-console-producer \
+     --bootstrap-server kafka:29092 \
+     --topic avro-source \
+     --property value.schema='{"type":"record","name":"User","fields":[{"name":"id","type":"int"},{"name":"name","type":"string"},{"name":"status","type":"string"}]}'
+   ```
+5. Consume the XML message from the target topic `xml-target`:
+   ```bash
+   KAFKA_CID=$(docker ps --filter "name=kafka" --format "{{.ID}}" | head -n 1)
+   docker exec -i "$KAFKA_CID" kafka-console-consumer \
+     --bootstrap-server kafka:29092 \
+     --topic xml-target \
+     --from-beginning \
+     --max-messages 1
+   ```
+6. Clean up:
+   ```bash
+   docker compose -f test-env/docker-compose.yml down -v
+   ```
+
+---
+
+### Option 2: Kubernetes Testing (Strimzi Operator)
+
+This environment deploys a Strimzi Kafka cluster, Schema Registry, and a custom Strimzi Kafka Connect worker using Kubernetes manifests.
+
+#### Step-by-Step Execution:
+1. Ensure local Kubernetes (e.g. Docker Desktop Kubernetes, Minikube, or Kind) is running and active in your current context.
+2. Run the automated Kubernetes test script:
+   ```bash
+   ./strimzi-env/test-k8s.sh
+   ```
+
+#### Manual Verification Commands:
+1. Create the `kafka` namespace:
+   ```bash
+   kubectl create namespace kafka
+   ```
+2. Install the Strimzi Cluster Operator:
+   ```bash
+   kubectl apply -f 'https://strimzi.io/install/latest?namespace=kafka' -n kafka
+   ```
+3. Build the custom Connect Docker image (loads the Java 11 fat JAR):
+   ```bash
+   docker build -t test-env-kafka-connect:strimzi-3.0 -f strimzi-env/Dockerfile.connect-strimzi .
+   ```
+4. Apply the Kubernetes manifests:
+   ```bash
+   kubectl apply -f strimzi-env/kafka-cluster.yaml
+   kubectl apply -f strimzi-env/schema-registry.yaml
+   kubectl apply -f strimzi-env/kafka-connect.yaml
+   ```
+5. Wait for all resources to become ready:
+   ```bash
+   kubectl wait --namespace kafka --for=condition=ready kafka/my-cluster --timeout=300s
+   kubectl wait --namespace kafka --for=condition=ready pod --selector=app=schema-registry --timeout=120s
+   kubectl wait --namespace kafka --for=condition=ready kafkaconnect/my-connect-cluster --timeout=300s
+   ```
+6. Produce a sample Avro record to `avro-source` inside the cluster:
+   ```bash
+   SCHEMA_REGISTRY_POD=$(kubectl get pod -n kafka -l app=schema-registry -o jsonpath="{.items[0].metadata.name}")
+   echo '{"id": 2002, "name": "Alice & Bob (K8s)", "status": "active"}' | kubectl exec -i -n kafka "$SCHEMA_REGISTRY_POD" -- kafka-avro-console-producer \
+     --bootstrap-server my-cluster-kafka-bootstrap:9092 \
+     --topic avro-source \
+     --property value.schema='{"type":"record","name":"User","fields":[{"name":"id","type":"int"},{"name":"name","type":"string"},{"name":"status","type":"string"}]}'
+   ```
+7. Consume the output XML message from `xml-target`:
+   ```bash
+   kubectl exec -i -n kafka my-cluster-kafka-node-pool-0 -c kafka -- bin/kafka-console-consumer.sh \
+     --bootstrap-server localhost:9092 \
+     --topic xml-target \
+     --from-beginning \
+     --max-messages 1
+   ```
+8. Clean up Connect cluster resources:
+   ```bash
+   kubectl delete kafkaconnect my-connect-cluster -n kafka
+   ```
